@@ -68,31 +68,68 @@ jobs:
 
       - name: Run Build Script
         run: |
-          # 1. Create a very short temporary directory
-          # This reduces the length of the strings passed to the shell
+          # 1. Create short temporary directory & Sync
           sudo mkdir -p /k
           sudo chown -R runner:runner /k
-          
-          # 2. Sync everything to the short path
           rsync -aq ./ /k/
           cd /k
           
-          # 3. Patch the script inside the new location
-          # We need to re-run the path replacement for the new /k directory
-          sed -i "s|$(pwd)/toolchains|/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q/toolchains|g" build_kona_kernel.sh
+          # 2. Inject BPFtrace/Debug requirements into defconfig
+          # For Kona/S20FE, the base config is usually vendor/kona-sec-perf_defconfig
+          DEFCONFIG_PATH="arch/arm64/configs/vendor/kona-sec-perf_defconfig"
+          echo "Injecting BPFtrace requirements into $DEFCONFIG_PATH..."
+          
+          {
+            echo "CONFIG_DEBUG_INFO=y"
+            echo "CONFIG_DEBUG_INFO_DWARF5=y"
+            echo "CONFIG_DEBUG_INFO_BTF=y"
+            echo "CONFIG_DEBUG_INFO_NONE=n"
+            echo "CONFIG_DEBUG_INFO_REDUCED=n"
+            echo "CONFIG_DEBUG_INFO_SPLIT=n"
+            echo "CONFIG_BPF=y"
+            echo "CONFIG_BPF_SYSCALL=y"
+            echo "CONFIG_BPF_JIT=y"
+            echo "CONFIG_KPROBES=y"
+            echo "CONFIG_KPROBE_EVENTS=y"
+            echo "CONFIG_UPROBES=y"
+            echo "CONFIG_UPROBE_EVENTS=y"
+            echo "CONFIG_PERF_EVENTS=y"
+            echo "CONFIG_FTRACE=y"
+            echo "CONFIG_DYNAMIC_FTRACE=y"
+            echo "CONFIG_FUNCTION_TRACER=y"
+            echo "CONFIG_GENERIC_TRACER=y"
+            echo "CONFIG_TRACING=y"
+            echo "CONFIG_FUNCTION_ERROR_INJECTION=y"
+            echo "CONFIG_BPF_KPROBE_OVERRIDE=y"
+            echo "CONFIG_BPF_EVENTS=y"
+            echo "CONFIG_KRETPROBES=y"
+            echo "CONFIG_HAVE_KPROBES=y"
+            echo "CONFIG_HAVE_KRETPROBES=y"
+            echo "CONFIG_KALLSYMS=y"
+            echo "CONFIG_KALLSYMS_ALL=y"
+            echo "CONFIG_MODULES=y"
+            echo "CONFIG_MODULE_FORCE_LOAD=y"
+            echo "CONFIG_STRICT_MEMORY_RWX=n"
+          } >> $DEFCONFIG_PATH
+
+          # 3. Patch the toolchain paths for the new /k location
+          # Point them back to the workspace where we downloaded them
+          sed -i "s|/home/atakan/clang/clang-r547379|/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q/toolchains/clang-r547379|g" build_kona_kernel.sh
+          sed -i "s|/home/atakan/gas|/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q/toolchains/gas|g" build_kona_kernel.sh
           
           # 4. Standard build prep
           ulimit -s unlimited
           chmod +x build_kona_kernel.sh
           export KCFLAGS="-Wno-error"
           
-          # 5. Run the build
+          # 5. Run the build (Model r8q | No SDClang | Yes KSU | Yes Permissive)
           printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
           
-          # 6. Move the output back to the workspace so the 'Upload' step can find it
+          # 6. Move output back to workspace for Upload
           mkdir -p $GITHUB_WORKSPACE/out
           cp -r /k/out/* $GITHUB_WORKSPACE/out/ || true
-          cp -r /k/build_env $GITHUB_WORKSPACE/ || true
+          # If the Repack worked, get the images
+          cp -r /k/build_env/r8q/*.img $GITHUB_WORKSPACE/out/ || true
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
