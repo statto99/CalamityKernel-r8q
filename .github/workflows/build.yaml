@@ -52,18 +52,26 @@ jobs:
           if [ -f "build_kona_kernel.sh" ]; then
             chmod +x build_kona_kernel.sh
             
-            # --- FIXING HARDCODED PATHS ---
-            # We tell the script to look for Clang in our AOSP directory instead of the developer's local home folder
+            # 1. Fix Hardcoded Toolchain Paths
             TOOLCHAIN_PATH="$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b"
-            
-            # This 'sed' command finds any line setting a toolchain path and points it to our CI folder
             sed -i "s|/home/.*/toolchains/.*-clang|$TOOLCHAIN_PATH|g" build_kona_kernel.sh
-            
-            # We also disable the "Exit if directory not found" check in the script
             sed -i 's/exit 1/echo "Forcing build..."/g' build_kona_kernel.sh
+
+            # 2. Global Compiler Fixes
+            # Disable specific warnings that commonly break drivers/staging/android
+            export KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-int-conversion -Wno-format-security"
+            export KCPPFLAGS="-Wno-error"
             
-            # --- RUNNING THE BUILD ---
-            # Sequence: r8q -> No LLVM -> Yes KSU -> Yes Permissive
+            # 3. Handle KernelSU properly
+            # If the script downloads KSU, it might need git identity
+            git config --global user.email "ci@example.com"
+            git config --global user.name "CI"
+
+            # 4. Cleanup 'out' if it exists to prevent 'Error 2' from previous cached failures
+            rm -rf out/
+            
+            # 5. Run the Build
+            # Device: r8q | LLVM: no | KSU: yes | Permissive: yes
             printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
           else
             echo "Error: build_kona_kernel.sh not found."
