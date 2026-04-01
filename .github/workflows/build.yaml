@@ -36,9 +36,10 @@ jobs:
         run: |
           if [ -f "build_kona_kernel.sh" ]; then
             chmod +x build_kona_kernel.sh
-            # r8q selects the device
-            # no selects standard Clang (bypassing proprietary Snapdragon LLVM)
-            printf "r8q\nno\n" | ./build_kona_kernel.sh
+            # 1. r8q (Device)
+            # 2. no (Standard Clang, not Snapdragon LLVM)
+            # 3. yes (Add KernelSU support)
+            printf "r8q\nno\nyes\n" | ./build_kona_kernel.sh
           else
             echo "Error: build_kona_kernel.sh not found."
             exit 1
