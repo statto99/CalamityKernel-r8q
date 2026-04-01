@@ -68,16 +68,31 @@ jobs:
 
       - name: Run Build Script
         run: |
-          # Fix for "Argument list too long" error
+          # 1. Create a very short temporary directory
+          # This reduces the length of the strings passed to the shell
+          sudo mkdir -p /k
+          sudo chown -R runner:runner /k
+          
+          # 2. Sync everything to the short path
+          rsync -aq ./ /k/
+          cd /k
+          
+          # 3. Patch the script inside the new location
+          # We need to re-run the path replacement for the new /k directory
+          sed -i "s|$(pwd)/toolchains|/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q/toolchains|g" build_kona_kernel.sh
+          
+          # 4. Standard build prep
           ulimit -s unlimited
-          
           chmod +x build_kona_kernel.sh
-          
-          # Force the compiler to ignore minor errors
           export KCFLAGS="-Wno-error"
           
-          # Bypass interactive menus
+          # 5. Run the build
           printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
+          
+          # 6. Move the output back to the workspace so the 'Upload' step can find it
+          mkdir -p $GITHUB_WORKSPACE/out
+          cp -r /k/out/* $GITHUB_WORKSPACE/out/ || true
+          cp -r /k/build_env $GITHUB_WORKSPACE/ || true
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
