@@ -27,7 +27,20 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu clang lld llvm libssl-dev python3-dev
+          # Create a symlink because some scripts call 'python' but Ubuntu 22.04+ uses 'python3'
           sudo ln -sf /usr/bin/python3 /usr/bin/python
+
+      - name: Download and Setup AOSP Clang
+        run: |
+          # Create the exact directory structure the Calamity script looks for
+          mkdir -p prebuilts/clang/host/linux-x86
+          
+          # Download the specific Clang version for Snapdragon 865 (Kona)
+          # Using a shallow clone to save disk space on the runner
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
+          
+          # Add the toolchain bin folder to the system PATH
+          echo "$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b/bin" >> $GITHUB_PATH
 
       - name: Set Build Start Time
         run: echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
@@ -36,10 +49,16 @@ jobs:
         run: |
           if [ -f "build_kona_kernel.sh" ]; then
             chmod +x build_kona_kernel.sh
-            # Answers: Device -> LLVM -> KSU -> Permissive
+            
+            # This 'printf' handles the 4 interactive menus we found:
+            # 1. r8q (Select Device)
+            # 2. no (Use standard Clang, not Snapdragon LLVM)
+            # 3. yes (Enable KernelSU)
+            # 4. yes (Set SELinux to Permissive)
             printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
           else
-            echo "Error: build_kona_kernel.sh not found."
+            echo "Error: build_kona_kernel.sh not found. Listing root directory:"
+            ls -F
             exit 1
           fi
 
@@ -52,12 +71,13 @@ jobs:
           minutes=$((duration / 60))
           seconds=$((duration % 60))
           echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
+          echo "Total duration: ${minutes}m ${seconds}s"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Patched-Kernel-r8q
-          # The script usually outputs a flashable zip in the root or 'out' folder
+          # The script typically generates a flashable .zip in the 'out' directory
           path: |
-            *.zip
             out/*.zip
+            *.zip
