@@ -33,13 +33,19 @@ jobs:
 
       - name: Download and Setup AOSP Clang
         run: |
+          # 1. Create the base directory
           mkdir -p prebuilts/clang/host/linux-x86
-          # Using r416183b which is the standard for Snapdragon 865 kernels
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
+          
+          # 2. Clone from LineageOS mirror (much more reliable for GitHub Actions)
+          # This specifically pulls the r416183b version needed for Snapdragon 865
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
+          
+          # 3. Add the bin folder to the system PATH
           echo "$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b/bin" >> $GITHUB_PATH
-
-      - name: Set Build Start Time
-        run: echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
+          
+          # 4. Debug: Verify clang is accessible
+          export PATH="$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH"
+          clang --version
 
       - name: Run build script
         run: |
