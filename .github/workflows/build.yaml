@@ -1,0 +1,23 @@
+# Place this in .github/workflows/build.yml
+name: Build CalamityKernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Kernel
+        uses: lemniskett/android-kernel-actions@master
+        with:
+          arch: arm64
+          compiler: clang
+          # The specific defconfig for r8q (S20 FE)
+          defconfig: vendor/r8q_eur_open_defconfig
+          # Change this based on the actual image format produced (usually Image.gz or Image.gz-dtb)
+          image: Image.gz-dtb
+        env:
+          NAME: CalamityKernel-r8q
+          # Ensure you use the correct Clang version compatible with Android 11/12+
+          CUSTOM_CMALine: "CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi-"
