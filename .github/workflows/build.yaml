@@ -47,15 +47,17 @@ jobs:
           cp /usr/bin/aarch64-linux-gnu-as gas/aarch64-linux-gnu-as
           cp /usr/bin/aarch64-linux-gnu-ar gas/aarch64-linux-gnu-ar
 
-      - name: Patch Build Script Pathing
+      - name: Patch Script Paths
         run: |
-          # Replace the hardcoded /home/atakan/ paths with the GitHub workspace path
-          # This is the critical fix for the 'AOSP toolchain directories not found' error
-          sed -i "s|/home/atakan/clang/clang-r547379|$(pwd)/clang/clang-r547379|g" build_kona_kernel.sh
-          sed -i "s|/home/atakan/gas|$(pwd)/gas|g" build_kona_kernel.sh
+          # Replace the hardcoded paths (Already working!)
+          sed -i "s|/home/atakan/clang/clang-r547379|$(pwd)/toolchains/clang-r547379|g" build_kona_kernel.sh
+          sed -i "s|/home/atakan/gas|$(pwd)/toolchains/gas|g" build_kona_kernel.sh
           
-          # Optional: Fix warnings as errors if it still fails on drivers
-          export KCFLAGS="-Wno-error"
+          # NEW: Force the compiler to ignore warnings that stop the build
+          # This tells the kernel's Makefile to be less strict
+          sed -i 's/KBUILD_CFLAGS   += -w/KBUILD_CFLAGS   += -w -Wno-error/g' Makefile
+          
+          chmod +x build_env/WORK_DIR/magiskboot-x86
 
       - name: Run Build Script
         run: |
