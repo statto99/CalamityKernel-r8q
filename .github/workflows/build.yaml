@@ -28,41 +28,28 @@ jobs:
           libssl-dev python3-dev rsync curl git
           sudo ln -sf /usr/bin/python3 /usr/bin/python
 
-      - name: Setup Toolchains (Clang & GAS)
+      - name: Setup Toolchains
         run: |
-          # 1. Create the directories the script expects
-          mkdir -p clang/clang-r547379
-          mkdir -p gas
-          
-          # 2. Download the exact Clang r547379 (AOSP)
-          # We use a newer AOSP mirror for this specific version
-          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
-          tar -C clang/clang-r547379 -xzf clang-r547379.tar.gz
-          
-          # 3. Setup GAS (Generic AArch64/ARM32 binutils)
-          # We link the system ones to the 'gas' folder the script looks for
-          ln -s /usr/bin/aarch64-linux-gnu-ld gas/aarch64-linux-gnu-ld
-          ln -s /usr/bin/aarch64-linux-gnu-objcopy gas/aarch64-linux-gnu-objcopy
-          # Add prefix for the script's specific GAS_CROSS_COMPILE variable
-          cp /usr/bin/aarch64-linux-gnu-as gas/aarch64-linux-gnu-as
-          cp /usr/bin/aarch64-linux-gnu-ar gas/aarch64-linux-gnu-ar
+          mkdir -p toolchains/clang-r547379
+          mkdir -p toolchains/gas
+          # Download Clang r547379
+          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
+          tar -C toolchains/clang-r547379 -xzf clang-r547379.tar.gz
+          # Link system tools to the 'gas' folder
+          ln -s /usr/bin/aarch64-linux-gnu-as toolchains/gas/aarch64-linux-gnu-as
+          ln -s /usr/bin/aarch64-linux-gnu-ld toolchains/gas/aarch64-linux-gnu-ld
 
       - name: Patch Script Paths
         run: |
-          # Replace the hardcoded paths (Already working!)
+          # This swaps the developer's home path for the GitHub path
           sed -i "s|/home/atakan/clang/clang-r547379|$(pwd)/toolchains/clang-r547379|g" build_kona_kernel.sh
           sed -i "s|/home/atakan/gas|$(pwd)/toolchains/gas|g" build_kona_kernel.sh
-          
-          # NEW: Force the compiler to ignore warnings that stop the build
-          # This tells the kernel's Makefile to be less strict
-          sed -i 's/KBUILD_CFLAGS   += -w/KBUILD_CFLAGS   += -w -Wno-error/g' Makefile
-          
-          chmod +x build_env/WORK_DIR/magiskboot-x86
 
-      - name: Run Build Script
+      - name: Run build script
         run: |
           chmod +x build_kona_kernel.sh
-          # Answer the 4 prompts: r8q, no (SDClang), yes (KSU), yes (Permissive)
+          # Tell the compiler to ignore minor errors
+          export KCFLAGS="-Wno-error"
           printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
 
       - name: Upload Kernel Artifact
