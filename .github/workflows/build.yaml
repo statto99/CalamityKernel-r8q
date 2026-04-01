@@ -66,11 +66,17 @@ jobs:
           # Ensure the magiskboot tool inside your repo is executable for the repack phase
           chmod +x build_env/WORK_DIR/magiskboot-x86 || true
 
-      - name: Run build script
+      - name: Run Build Script
         run: |
+          # Fix for "Argument list too long" error
+          ulimit -s unlimited
+          
           chmod +x build_kona_kernel.sh
-          # Tell the compiler to ignore minor errors
+          
+          # Force the compiler to ignore minor errors
           export KCFLAGS="-Wno-error"
+          
+          # Bypass interactive menus
           printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
 
       - name: Upload Kernel Artifact
