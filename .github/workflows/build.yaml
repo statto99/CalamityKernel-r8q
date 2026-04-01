@@ -36,11 +36,11 @@ jobs:
         run: |
           if [ -f "build_kona_kernel.sh" ]; then
             chmod +x build_kona_kernel.sh
-            # We echo "r8q" and pipe it (|) into the script to bypass the menu
-            echo "r8q" | ./build_kona_kernel.sh
+            # r8q selects the device
+            # no selects standard Clang (bypassing proprietary Snapdragon LLVM)
+            printf "r8q\nno\n" | ./build_kona_kernel.sh
           else
             echo "Error: build_kona_kernel.sh not found."
-            ls -F
             exit 1
           fi
 
