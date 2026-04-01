@@ -24,26 +24,33 @@ jobs:
       - name: Setting up Environment
         run: |
           sudo apt-get update -y
+          # Added wget and gcc-arm-linux-gnueabi for the 32-bit compat headers
           sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-          libssl-dev python3-dev rsync curl git
+          gcc-arm-linux-gnueabi libssl-dev python3-dev rsync curl git wget
           sudo ln -sf /usr/bin/python3 /usr/bin/python
 
       - name: Setup Toolchains
         run: |
           mkdir -p toolchains/clang-r547379
           mkdir -p toolchains/gas
+          
           # Download Clang r547379
           wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
           tar -C toolchains/clang-r547379 -xzf clang-r547379.tar.gz
+          
           # Link system tools to the 'gas' folder
           ln -s /usr/bin/aarch64-linux-gnu-as toolchains/gas/aarch64-linux-gnu-as
           ln -s /usr/bin/aarch64-linux-gnu-ld toolchains/gas/aarch64-linux-gnu-ld
+          # Added the 32-bit link that Kona kernels often look for
+          ln -s /usr/bin/arm-linux-gnueabi-as toolchains/gas/arm-linux-gnueabi-as
 
       - name: Patch Script Paths
         run: |
           # This swaps the developer's home path for the GitHub path
           sed -i "s|/home/atakan/clang/clang-r547379|$(pwd)/toolchains/clang-r547379|g" build_kona_kernel.sh
           sed -i "s|/home/atakan/gas|$(pwd)/toolchains/gas|g" build_kona_kernel.sh
+          # Ensure the magiskboot tool inside your repo is executable for the repack phase
+          chmod +x build_env/WORK_DIR/magiskboot-x86 || true
 
       - name: Run build script
         run: |
