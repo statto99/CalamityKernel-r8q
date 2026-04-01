@@ -1,23 +1,70 @@
-# Place this in .github/workflows/build.yml
-name: Build CalamityKernel
+name: build not-kernel CI variant r8q
 
 on:
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-latest
+
+    env:
+      DEVICE: r8q
+      DEVICE_NAME: Galaxy S20 FE
+      KERNEL_NAME: not_kernel
+
     steps:
-      - name: Build Kernel
-        uses: lemniskett/android-kernel-actions@master
+      - name: Check Out
+        uses: actions/checkout@v4 # Upgraded to v4 for better performance
+
+      - name: Set Timezone
+        uses: szenius/set-timezone@v1.2
         with:
-          arch: arm64
-          compiler: clang
-          # The specific defconfig for r8q (S20 FE)
-          defconfig: vendor/r8q_eur_open_defconfig
-          # Change this based on the actual image format produced (usually Image.gz or Image.gz-dtb)
-          image: Image.gz-dtb
-        env:
-          NAME: CalamityKernel-r8q
-          # Ensure you use the correct Clang version compatible with Android 11/12+
-          CUSTOM_CMALine: "CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi-"
+          timezoneLinux: "America/Sao_Paulo"
+
+      - name: Setting up the environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu clang lld llvm libssl-dev python3-dev
+          # Link python if the script expects 'python' instead of 'python3'
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+
+      - name: Setup Toolchain (Proton Clang)
+        run: |
+          mkdir toolchain
+          cd toolchain
+          # Calamity r8q works best with a newer Clang. Downloading a prebuilt one:
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
+          echo "$(pwd)/clang/bin" >> $GITHUB_PATH
+
+      - name: Set Build Start Time
+        run: echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Run build script
+        run: |
+          chmod +x build-r8q.sh
+          # Pass the toolchain variables in case the script doesn't auto-detect
+          export CC=clang
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          ./build-r8q.sh
+
+      - name: Set Build End Time
+        run: echo "END_TIME=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Calculate Build Duration
+        run: |
+          duration=$((END_TIME - START_TIME))
+          minutes=$((duration / 60))
+          seconds=$((duration % 60))
+          echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
+          echo "Total duration: ${minutes}m ${seconds}s"
+
+      - name: Upload Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Patched-Kernel-r8q
+          # Using a wildcard for the build-r8q output
+          path: |
+            *.zip
+            out/*.zip
