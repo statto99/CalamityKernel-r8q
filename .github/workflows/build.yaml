@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Check Out
-        uses: actions/checkout@v4 # Upgraded to v4 for better performance
+        uses: actions/checkout@v4
 
       - name: Set Timezone
         uses: szenius/set-timezone@v1.2
@@ -27,27 +27,22 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu clang lld llvm libssl-dev python3-dev
-          # Link python if the script expects 'python' instead of 'python3'
           sudo ln -sf /usr/bin/python3 /usr/bin/python
-
-      - name: Setup Toolchain (Proton Clang)
-        run: |
-          mkdir toolchain
-          cd toolchain
-          # Calamity r8q works best with a newer Clang. Downloading a prebuilt one:
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
-          echo "$(pwd)/clang/bin" >> $GITHUB_PATH
 
       - name: Set Build Start Time
         run: echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
 
       - name: Run build script
         run: |
-          chmod +x build-r8q.sh
-          # Pass the toolchain variables in case the script doesn't auto-detect
-          export CC=clang
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          ./build-r8q.sh
+          # The file in this repo is named build_kona_kernel.sh
+          if [ -f "build_kona_kernel.sh" ]; then
+            chmod +x build_kona_kernel.sh
+            ./build_kona_kernel.sh
+          else
+            echo "Error: build_kona_kernel.sh not found. Listing files:"
+            ls -F
+            exit 1
+          fi
 
       - name: Set Build End Time
         run: echo "END_TIME=$(date +%s)" >> $GITHUB_ENV
@@ -58,13 +53,12 @@ jobs:
           minutes=$((duration / 60))
           seconds=$((duration % 60))
           echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
-          echo "Total duration: ${minutes}m ${seconds}s"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Patched-Kernel-r8q
-          # Using a wildcard for the build-r8q output
+          # The script usually outputs a flashable zip in the root or 'out' folder
           path: |
             *.zip
             out/*.zip
