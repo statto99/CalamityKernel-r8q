@@ -9,90 +9,66 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
 
-    env:
-      DEVICE: r8q
-      DEVICE_NAME: Galaxy S20 FE
-      KERNEL_NAME: not_kernel
-
     steps:
       - name: Check Out
         uses: actions/checkout@v4
         with:
           ref: CALY-Stable
+          submodules: recursive
 
-      - name: Set Timezone
-        uses: szenius/set-timezone@v1.2
-        with:
-          timezoneLinux: "America/Sao_Paulo"
+      - name: Free Disk Space
+        run: |
+          sudo docker image prune -a -f
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
 
-      - name: Setting up the environment
+      - name: Setting up Environment
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu clang lld llvm libssl-dev python3-dev
+          sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+          libssl-dev python3-dev rsync curl git
           sudo ln -sf /usr/bin/python3 /usr/bin/python
 
-      - name: Download and Setup AOSP Clang
+      - name: Setup Toolchains (Clang & GAS)
         run: |
-          # 1. Create the base directory
-          mkdir -p prebuilts/clang/host/linux-x86
+          # 1. Create the directories the script expects
+          mkdir -p clang/clang-r547379
+          mkdir -p gas
           
-          # 2. Clone from LineageOS mirror (much more reliable for GitHub Actions)
-          # This specifically pulls the r416183b version needed for Snapdragon 865
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
+          # 2. Download the exact Clang r547379 (AOSP)
+          # We use a newer AOSP mirror for this specific version
+          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz
+          tar -C clang/clang-r547379 -xzf clang-r547379.tar.gz
           
-          # 3. Add the bin folder to the system PATH
-          echo "$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b/bin" >> $GITHUB_PATH
-          
-          # 4. Debug: Verify clang is accessible
-          export PATH="$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH"
-          clang --version
+          # 3. Setup GAS (Generic AArch64/ARM32 binutils)
+          # We link the system ones to the 'gas' folder the script looks for
+          ln -s /usr/bin/aarch64-linux-gnu-ld gas/aarch64-linux-gnu-ld
+          ln -s /usr/bin/aarch64-linux-gnu-objcopy gas/aarch64-linux-gnu-objcopy
+          # Add prefix for the script's specific GAS_CROSS_COMPILE variable
+          cp /usr/bin/aarch64-linux-gnu-as gas/aarch64-linux-gnu-as
+          cp /usr/bin/aarch64-linux-gnu-ar gas/aarch64-linux-gnu-ar
 
-      - name: Run build script
+      - name: Patch Build Script Pathing
         run: |
-          if [ -f "build_kona_kernel.sh" ]; then
-            chmod +x build_kona_kernel.sh
-            
-            # 1. Fix Hardcoded Toolchain Paths
-            TOOLCHAIN_PATH="$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b"
-            sed -i "s|/home/.*/toolchains/.*-clang|$TOOLCHAIN_PATH|g" build_kona_kernel.sh
-            sed -i 's/exit 1/echo "Forcing build..."/g' build_kona_kernel.sh
+          # Replace the hardcoded /home/atakan/ paths with the GitHub workspace path
+          # This is the critical fix for the 'AOSP toolchain directories not found' error
+          sed -i "s|/home/atakan/clang/clang-r547379|$(pwd)/clang/clang-r547379|g" build_kona_kernel.sh
+          sed -i "s|/home/atakan/gas|$(pwd)/gas|g" build_kona_kernel.sh
+          
+          # Optional: Fix warnings as errors if it still fails on drivers
+          export KCFLAGS="-Wno-error"
 
-            # 2. Global Compiler Fixes
-            # Disable specific warnings that commonly break drivers/staging/android
-            export KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-int-conversion -Wno-format-security"
-            export KCPPFLAGS="-Wno-error"
-            
-            # 3. Handle KernelSU properly
-            # If the script downloads KSU, it might need git identity
-            git config --global user.email "ci@example.com"
-            git config --global user.name "CI"
-
-            # 4. Cleanup 'out' if it exists to prevent 'Error 2' from previous cached failures
-            rm -rf out/
-            
-            # 5. Run the Build
-            # Device: r8q | LLVM: no | KSU: yes | Permissive: yes
-            printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
-          else
-            echo "Error: build_kona_kernel.sh not found."
-            exit 1
-          fi
-
-      - name: Set Build End Time
-        run: echo "END_TIME=$(date +%s)" >> $GITHUB_ENV
-
-      - name: Calculate Build Duration
+      - name: Run Build Script
         run: |
-          duration=$((END_TIME - START_TIME))
-          minutes=$((duration / 60))
-          seconds=$((duration % 60))
-          echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
+          chmod +x build_kona_kernel.sh
+          # Answer the 4 prompts: r8q, no (SDClang), yes (KSU), yes (Permissive)
+          printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Patched-Kernel-r8q
+          name: Calamity-r8q-Kernel
           path: |
-            out/*.zip
-            *.zip
-            out/arch/arm64/boot/Image.gz-dtb
+            out/Image
+            out/dtb.img
+            out/dtbo.img
+            build_env/r8q/*.img
