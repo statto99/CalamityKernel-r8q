@@ -2,7 +2,7 @@ name: build not-kernel CI variant r8q
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "CALY-Stable" ]
   workflow_dispatch:
 
 jobs:
@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Check Out
         uses: actions/checkout@v4
+        with:
+          ref: CALY-Stable
 
       - name: Set Timezone
         uses: szenius/set-timezone@v1.2
@@ -27,19 +29,13 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu clang lld llvm libssl-dev python3-dev
-          # Create a symlink because some scripts call 'python' but Ubuntu 22.04+ uses 'python3'
           sudo ln -sf /usr/bin/python3 /usr/bin/python
 
       - name: Download and Setup AOSP Clang
         run: |
-          # Create the exact directory structure the Calamity script looks for
           mkdir -p prebuilts/clang/host/linux-x86
-          
-          # Download the specific Clang version for Snapdragon 865 (Kona)
-          # Using a shallow clone to save disk space on the runner
+          # Using r416183b which is the standard for Snapdragon 865 kernels
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
-          
-          # Add the toolchain bin folder to the system PATH
           echo "$(pwd)/prebuilts/clang/host/linux-x86/clang-r416183b/bin" >> $GITHUB_PATH
 
       - name: Set Build Start Time
@@ -49,12 +45,7 @@ jobs:
         run: |
           if [ -f "build_kona_kernel.sh" ]; then
             chmod +x build_kona_kernel.sh
-            
-            # This 'printf' handles the 4 interactive menus we found:
-            # 1. r8q (Select Device)
-            # 2. no (Use standard Clang, not Snapdragon LLVM)
-            # 3. yes (Enable KernelSU)
-            # 4. yes (Set SELinux to Permissive)
+            # Sequence: r8q -> No LLVM -> Yes KSU -> Yes Permissive
             printf "r8q\nno\nyes\nyes\n" | ./build_kona_kernel.sh
           else
             echo "Error: build_kona_kernel.sh not found. Listing root directory:"
@@ -71,13 +62,12 @@ jobs:
           minutes=$((duration / 60))
           seconds=$((duration % 60))
           echo "BUILD_DURATION=${minutes}m ${seconds}s" >> $GITHUB_ENV
-          echo "Total duration: ${minutes}m ${seconds}s"
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Patched-Kernel-r8q
-          # The script typically generates a flashable .zip in the 'out' directory
           path: |
             out/*.zip
             *.zip
+            out/arch/arm64/boot/Image.gz-dtb
