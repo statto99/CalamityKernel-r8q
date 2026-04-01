@@ -34,12 +34,12 @@ jobs:
 
       - name: Run build script
         run: |
-          # The file in this repo is named build_kona_kernel.sh
           if [ -f "build_kona_kernel.sh" ]; then
             chmod +x build_kona_kernel.sh
-            ./build_kona_kernel.sh
+            # We echo "r8q" and pipe it (|) into the script to bypass the menu
+            echo "r8q" | ./build_kona_kernel.sh
           else
-            echo "Error: build_kona_kernel.sh not found. Listing files:"
+            echo "Error: build_kona_kernel.sh not found."
             ls -F
             exit 1
           fi
