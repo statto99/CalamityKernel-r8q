@@ -34,24 +34,27 @@ jobs:
           mkdir -p toolchains/clang-r547379
           mkdir -p toolchains/gas
           
-          # 1. Download Clang r547379 from a reliable GitHub Mirror
-          # This version is specifically for Android 14/15 based kernels
-          echo "Downloading Clang r547379..."
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r547379 toolchains/clang-r547379
+          # 1. Download Clang r547379 using a direct AOSP clone
+          # This is the official Google source and does not require a username
+          echo "Cloning Clang r547379 from AOSP..."
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 toolchains/clang-temp
+          
+          # The repo above contains MANY versions. We move the one we need.
+          mv toolchains/clang-temp/clang-r547379/* toolchains/clang-r547379/
+          rm -rf toolchains/clang-temp
           
           # 2. Link system tools to the 'gas' folder
-          # These satisfy the GAS_CROSS_COMPILE variables in your script
           ln -s /usr/bin/aarch64-linux-gnu-as toolchains/gas/aarch64-linux-gnu-as
           ln -s /usr/bin/aarch64-linux-gnu-ld toolchains/gas/aarch64-linux-gnu-ld
           ln -s /usr/bin/aarch64-linux-gnu-objcopy toolchains/gas/aarch64-linux-gnu-objcopy
           ln -s /usr/bin/arm-linux-gnueabi-as toolchains/gas/arm-linux-gnueabi-as
           
-          # 3. Verify the download
-          if [ -f "toolchains/clang-r547379/bin/clang" ]; then
-            echo "Clang downloaded successfully."
+          # 3. Verify
+          if [ -x "toolchains/clang-r547379/bin/clang" ]; then
+            echo "Clang r547379 is ready."
             ./toolchains/clang-r547379/bin/clang --version
           else
-            echo "Clang download failed!"
+            echo "Error: Clang binary not found!"
             exit 1
           fi
 
