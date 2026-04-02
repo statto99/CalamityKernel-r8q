@@ -27,11 +27,10 @@ jobs:
           python3-dev rsync curl git wget dwarves
           sudo ln -sf /usr/bin/python3 /usr/bin/python
 
-      - name: Setup Toolchains (Reliable Clone)
+      - name: Setup Toolchains
         run: |
           mkdir -p toolchains/clang-r547379
           mkdir -p toolchains/gas
-          echo "Cloning Clang r547379..."
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 toolchains/temp_clang
           mv toolchains/temp_clang/clang-r547379/* toolchains/clang-r547379/
           rm -rf toolchains/temp_clang
@@ -39,18 +38,16 @@ jobs:
           ln -s /usr/bin/aarch64-linux-gnu-ld toolchains/gas/aarch64-linux-gnu-ld
           ln -s /usr/bin/arm-linux-gnueabi-as toolchains/gas/arm-linux-gnueabi-as
 
-      - name: Verify Toolchain
-        run: |
-          ./toolchains/clang-r547379/bin/clang --version
-
       - name: Short-Path Build & Defconfig Injection
         run: |
           sudo mkdir -p /k
           sudo chown -R runner:runner /k
           rsync -aq ./ /k/
           cd /k
+          
           DEFCONFIG_PATH="arch/arm64/configs/vendor/kona-sec-perf_defconfig"
-          echo "Injecting MANDATORY BPF/DebugFS/Tracing suite into $DEFCONFIG_PATH"
+          
+          # Inject BPF/Tracing/DebugFS while silencing the QCOM Bus Debugger
           {
             echo "CONFIG_DEBUG_FS=y"
             echo "CONFIG_DEBUG_KERNEL=y"
@@ -97,7 +94,10 @@ jobs:
             echo "CONFIG_SECURITY_PERF_EVENTS_RESTRICT=n"
             echo "CONFIG_KSU=n"
           } >> "$DEFCONFIG_PATH"
-          
+
+          # Nuke the problematic file from the Makefile to prevent redefinition
+          sed -i 's/obj-$(CONFIG_DEBUG_FS) += msm_bus_dbg_rpmh.o/obj-$(CONFIG_MSM_BUS_RPMH_DBG) += msm_bus_dbg_rpmh.o/g' drivers/soc/qcom/msm_bus/Makefile
+
           WORKSPACE_PATH="/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q"
           sed -i "s|/home/atakan/clang/clang-r547379|$WORKSPACE_PATH/toolchains/clang-r547379|g" build_kona_kernel.sh
           sed -i "s|/home/atakan/gas|$WORKSPACE_PATH/toolchains/gas|g" build_kona_kernel.sh
