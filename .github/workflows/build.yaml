@@ -54,6 +54,9 @@ jobs:
           {
             echo "CONFIG_DEBUG_FS=y"
             echo "CONFIG_DEBUG_KERNEL=y"
+            echo "CONFIG_MSM_BUS_SCALING=y"
+            echo "CONFIG_MSM_BUS_RPMH=y"
+            echo "CONFIG_MSM_BUS_NODBG=y"
             echo "CONFIG_BPF=y"
             echo "CONFIG_BPF_SYSCALL=y"
             echo "CONFIG_BPF_JIT=y"
@@ -94,13 +97,17 @@ jobs:
             echo "CONFIG_SECURITY_PERF_EVENTS_RESTRICT=n"
             echo "CONFIG_KSU=n"
           } >> "$DEFCONFIG_PATH"
+          
           WORKSPACE_PATH="/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q"
           sed -i "s|/home/atakan/clang/clang-r547379|$WORKSPACE_PATH/toolchains/clang-r547379|g" build_kona_kernel.sh
           sed -i "s|/home/atakan/gas|$WORKSPACE_PATH/toolchains/gas|g" build_kona_kernel.sh
+          
           ulimit -s unlimited
           chmod +x build_kona_kernel.sh
           export KCFLAGS="-Wno-error"
+          
           printf "r8q\nno\nno\nyes\n" | ./build_kona_kernel.sh
+          
           mkdir -p $GITHUB_WORKSPACE/out
           cp -r /k/out/* $GITHUB_WORKSPACE/out/ || true
           cp -r /k/build_env/r8q/*.img $GITHUB_WORKSPACE/out/ || true
