@@ -22,8 +22,9 @@ jobs:
           sudo docker image prune -a -f
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update -y
+          # Added 'dwarves' for BTF support and 'libelf-dev' for BPF
           sudo apt-get install -y bc build-essential zip gcc-aarch64-linux-gnu \
-          binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev \
+          binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev libelf-dev \
           python3-dev rsync curl git wget dwarves
           sudo ln -sf /usr/bin/python3 /usr/bin/python
 
@@ -32,72 +33,88 @@ jobs:
           mkdir -p toolchains/clang-r547379
           mkdir -p toolchains/gas
           
-          # Using a full git clone for the toolchain to ensure no corruption
           echo "Cloning Clang r547379..."
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 toolchains/temp_clang
           mv toolchains/temp_clang/clang-r547379/* toolchains/clang-r547379/
           rm -rf toolchains/temp_clang
           
-          # Create symbolic links for the GAS toolchain
           ln -s /usr/bin/aarch64-linux-gnu-as toolchains/gas/aarch64-linux-gnu-as
           ln -s /usr/bin/aarch64-linux-gnu-ld toolchains/gas/aarch64-linux-gnu-ld
           ln -s /usr/bin/arm-linux-gnueabi-as toolchains/gas/arm-linux-gnueabi-as
 
       - name: Verify Toolchain
         run: |
-          echo "Checking Clang version..."
           ./toolchains/clang-r547379/bin/clang --version
 
       - name: Short-Path Build & Defconfig Injection
         run: |
-          # 1. Move to /k to solve "Argument list too long"
           sudo mkdir -p /k
           sudo chown -R runner:runner /k
           rsync -aq ./ /k/
           cd /k
           
-          # 2. Inject BPFtrace and Tracing requirements
-          # Path corrected for Kona chipset
           DEFCONFIG_PATH="arch/arm64/configs/vendor/kona-sec-perf_defconfig"
           
-          echo "Writing BPF/Tracing configs to $DEFCONFIG_PATH"
+          echo "Injecting full BPF/Tracing/Unlocking suite into $DEFCONFIG_PATH"
           cat >> $DEFCONFIG_PATH <<EOF
-          CONFIG_DEBUG_INFO=y
-          CONFIG_DEBUG_INFO_DWARF5=y
-          CONFIG_DEBUG_INFO_BTF=y
-          CONFIG_BPF=y
-          CONFIG_BPF_SYSCALL=y
-          CONFIG_BPF_JIT=y
-          CONFIG_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
-          CONFIG_UPROBES=y
-          CONFIG_UPROBE_EVENTS=y
-          CONFIG_PERF_EVENTS=y
-          CONFIG_FTRACE=y
-          CONFIG_DYNAMIC_FTRACE=y
-          CONFIG_FUNCTION_TRACER=y
-          CONFIG_TRACING=y
-          CONFIG_KALLSYMS=y
-          CONFIG_KALLSYMS_ALL=y
-          CONFIG_STRICT_MEMORY_RWX=n
-          CONFIG_KSU=n
-          EOF
+# --- eBPF Engine & JIT ---
+CONFIG_BPF=y
+CONFIG_BPF_SYSCALL=y
+CONFIG_BPF_JIT=y
+CONFIG_HAVE_EBPF_JIT=y
+CONFIG_BPF_JIT_ALWAYS_ON=y
+CONFIG_BPF_EVENTS=y
+CONFIG_CGROUP_BPF=y
 
-          # 3. Patch build script with absolute paths to the toolchain
-          # We use the original WORKSPACE path so the toolchain stays put
+# --- Tracing & Sensors ---
+CONFIG_FTRACE=y
+CONFIG_FUNCTION_TRACER=y
+CONFIG_TRACING=y
+CONFIG_DYNAMIC_FTRACE=y
+CONFIG_FTRACE_SYSCALLS=y
+CONFIG_HAVE_SYSCALL_TRACEPOINTS=y
+CONFIG_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+CONFIG_UPROBES=y
+CONFIG_UPROBE_EVENTS=y
+CONFIG_RETPROBES=y
+CONFIG_PROBE_EVENTS=y
+CONFIG_EVENT_TRACING=y
+CONFIG_PERF_EVENTS=y
+CONFIG_HAVE_PERF_EVENTS=y
+CONFIG_ANON_INODES=y
+
+# --- Debug & Symbols ---
+CONFIG_DEBUG_INFO=y
+CONFIG_DEBUG_INFO_BTF=y
+CONFIG_DEBUG_INFO_DWARF5=y
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
+CONFIG_IKCONFIG=y
+CONFIG_IKCONFIG_PROC=y
+CONFIG_FRAME_POINTER=y
+CONFIG_STRIP_ASM_SYMS=n
+
+# --- Security & Stability Overrides ---
+CONFIG_STRICT_KERNEL_RWX=n
+CONFIG_STRICT_MODULE_RWX=n
+CONFIG_RKP=n
+CONFIG_KNOX_KAP=n
+CONFIG_SECURITY_SELINUX_DEVELOP=y
+CONFIG_SECURITY_PERF_EVENTS_RESTRICT=n
+CONFIG_KSU=n
+EOF
+
           WORKSPACE_PATH="/home/runner/work/CalamityKernel-r8q/CalamityKernel-r8q"
           sed -i "s|/home/atakan/clang/clang-r547379|$WORKSPACE_PATH/toolchains/clang-r547379|g" build_kona_kernel.sh
           sed -i "s|/home/atakan/gas|$WORKSPACE_PATH/toolchains/gas|g" build_kona_kernel.sh
           
-          # 4. Final build execution
           ulimit -s unlimited
           chmod +x build_kona_kernel.sh
           export KCFLAGS="-Wno-error"
           
-          # Pass answers to prompts: Model=r8q, SDClang=no, KSU=no, Permissive=yes
           printf "r8q\nno\nno\nyes\n" | ./build_kona_kernel.sh
           
-          # 5. Bring artifacts back to the workspace
           mkdir -p $GITHUB_WORKSPACE/out
           cp -r /k/out/* $GITHUB_WORKSPACE/out/ || true
           cp -r /k/build_env/r8q/*.img $GITHUB_WORKSPACE/out/ || true
