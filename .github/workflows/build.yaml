@@ -50,8 +50,10 @@ jobs:
           rsync -aq ./ /k/
           cd /k
           DEFCONFIG_PATH="arch/arm64/configs/vendor/kona-sec-perf_defconfig"
-          echo "Injecting BPF/Tracing/Unlocking suite into $DEFCONFIG_PATH"
+          echo "Injecting MANDATORY BPF/DebugFS/Tracing suite into $DEFCONFIG_PATH"
           {
+            echo "CONFIG_DEBUG_FS=y"
+            echo "CONFIG_DEBUG_KERNEL=y"
             echo "CONFIG_BPF=y"
             echo "CONFIG_BPF_SYSCALL=y"
             echo "CONFIG_BPF_JIT=y"
